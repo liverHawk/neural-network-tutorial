@@ -1,0 +1,5 @@
+Epoch 300/300
+625/625 ━━━━━━━━━━━━━━━━━━━━ 1s 2ms/step - binary_accuracy: 0.9985 - loss: 0.0058 - val_binary_accuracy: 0.8482 - val_loss: 1.8374
+782/782 ━━━━━━━━━━━━━━━━━━━━ 6s 8ms/step - binary_accuracy: 0.8157 - loss: 2.2695
+loss 2.2203209400177
+Accuracy 0.8179600238800049
