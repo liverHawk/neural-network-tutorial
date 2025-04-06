@@ -1,139 +1,61 @@
 import matplotlib.pyplot as plt
 import os
-import re
-import shutil
-import string
+import pandas as pd
 import tensorflow as tf
 
-from tensorflow.keras import layers, losses
+from tensorflow.keras import layers
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 
 print(tf.__version__)
 
-url = "https://ai.stanford.edu/~amaas/data/sentiment/aclImdb_v1.tar.gz"
+PATH = os.path.abspath("../../Iris.csv")
+iris_data = pd.read_csv(PATH)
 
-# dataset = tf.keras.utils.get_file(
-#         "aclImdb",
-#         url,
-#         untar=True,
-#         cache_dir=".",
-#         cache_subdir=""
-#     )
-dataset = "./aclImdb/aclImdb/"
+x = iris_data.drop(columns=["Id", "Species"])
+y = iris_data["Species"]
 
-dataset_dir = os.path.abspath(dataset)
+encoder = LabelEncoder()
+y_encoded = encoder.fit_transform(y)
+y_onehot = tf.keras.utils.to_categorical(y_encoded)
 
-print(os.listdir(dataset_dir))
+x_train, x_test, y_train, y_test = train_test_split(x, y_onehot, test_size=0.2, random_state=42)
+x_train, x_val, y_train, y_val = train_test_split(x_train, y_train, test_size=0.2, random_state=42)
 
-train_dir = os.path.join(dataset_dir, "train")
-print(os.listdir(train_dir))
-
-sample_file = os.path.join(train_dir, "pos/1181_9.txt")
-
-with open(sample_file) as f:
-    print(f.read())
-
-# remove_dir = os.path.join(train_dir, "unsup")
-# shutil.rmtree(remove_dir)
-
-batch_size = 32
-seed = 42
-
-raw_train_ds = tf.keras.utils.text_dataset_from_directory(
-        "./aclImdb/aclImdb/train",
-        batch_size=batch_size,
-        validation_split=0.2,
-        subset="training",
-        seed=seed
-    )
-
-for text_batch, label_batch in raw_train_ds.take(1):
-    for i in range(3):
-        print("Review", text_batch.numpy()[i])
-        print("Label", label_batch.numpy()[i])
-
-raw_val_ds = tf.keras.utils.text_dataset_from_directory(
-        "./aclImdb/aclImdb/train",
-        batch_size=batch_size,
-        validation_split=0.2,
-        subset="validation",
-        seed=seed
-    )
-
-raw_test_ds = tf.keras.utils.text_dataset_from_directory(
-        "./aclImdb/aclImdb/test",
-        batch_size=batch_size
-    )
-
-
-def custom_standardzation(input_data):
-    lowercase = tf.strings.lower(input_data)
-    stripped_html = tf.strings.regex_replace(lowercase, "<br />", " ")
-    return tf.strings.regex_replace(
-            stripped_html,
-            "[%s]" % re.escape(string.punctuation),
-            ""
-        )
-
-
-max_features = 10000
-sequence_length = 250
-
-vectorize_layer = layers.TextVectorization(
-        standardize=custom_standardzation,
-        max_tokens=max_features,
-        output_mode="int",
-        output_sequence_length=sequence_length
-    )
-
-train_text = raw_train_ds.map(lambda x, y: x)
-vectorize_layer.adapt(train_text)
-
-
-def vectorize_text(text, label):
-    text = tf.expand_dims(text, -1)
-    return vectorize_layer(text), label
-
-
-text_batch, label_batch = next(iter(raw_train_ds))
-first_review, first_label = text_batch[0], label_batch[0]
-
-train_ds = raw_train_ds.map(vectorize_text)
-val_ds = raw_val_ds.map(vectorize_text)
-test_ds = raw_test_ds.map(vectorize_text)
-
-
-AUTOTUNE = tf.data.AUTOTUNE
-
-train_ds = train_ds.cache().prefetch(buffer_size=AUTOTUNE)
-val_ds = val_ds.cache().prefetch(buffer_size=AUTOTUNE)
-test_ds = test_ds.cache().prefetch(buffer_size=AUTOTUNE)
+scaler = StandardScaler()
+x_train = scaler.fit_transform(x_train)
+x_val = scaler.transform(x_val)
+x_test = scaler.transform(x_test)
 
 embedding_dim = 16
 
 model = tf.keras.Sequential([
-    layers.Embedding(max_features + 1, embedding_dim),
+    layers.Dense(10, activation="relu", input_shape=(4,)),
     layers.Dropout(0.2),
-    layers.GlobalAveragePooling1D(),
+    layers.Dense(8, activation="relu"),
     layers.Dropout(0.2),
-    layers.Dense(1)
+    layers.Dense(3, activation="softmax"),
 ])
 
 model.summary()
 
 model.compile(
-        loss=losses.BinaryCrossentropy(from_logits=True),
+        loss="categorical_crossentropy",
         optimizer="adam",
-        metrics=[tf.metrics.BinaryAccuracy(threshold=0.5)]
+        metrics=["accuracy"],
     )
 
-epochs = 300
+epochs = 100
 history = model.fit(
-        train_ds,
-        validation_data=val_ds,
-        epochs=epochs
+        x_train,
+        y_train,
+        epochs=epochs,
+        batch_size=16,
+        validation_data=(x_val, y_val),
+        verbose=1,
     )
 
-loss, accuracy = model.evaluate(test_ds)
+loss, accuracy = model.evaluate(x_test, y_test)
 
 print("loss", loss)
 print("Accuracy", accuracy)
@@ -141,8 +63,8 @@ print("Accuracy", accuracy)
 history_dict = history.history
 print(history_dict.keys())
 
-acc = history_dict['binary_accuracy']
-val_acc = history_dict['val_binary_accuracy']
+acc = history_dict['accuracy']
+val_acc = history_dict['val_accuracy']
 loss = history_dict['loss']
 val_loss = history_dict['val_loss']
 
@@ -157,4 +79,4 @@ plt.xlabel('Epochs')
 plt.ylabel('Loss')
 plt.legend()
 
-plt.show()
+plt.savefig("loss.png")
